@@ -492,8 +492,8 @@ function dashboardHTML() {
     <section class="panel dashboard-date-panel" aria-label="Chọn ngày Dashboard">
       <div><strong>Ngày điều trị: ${displayDate(selectedTimelineDate())}</strong><small lang="ja">施術日を選択</small></div>
       <div class="timeline-date-controls">
+        <label for="timelineDate">Chọn ngày<small lang="ja">日付を選択</small><span class="date-display-input"><span>${displayDate(selectedTimelineDate())}</span><span aria-hidden="true">▦</span><input id="timelineDate" type="date" value="${selectedTimelineDate()}" aria-label="Chọn ngày điều trị"></span></label>
         <button type="button" class="button" data-action="timeline-prev">← Ngày trước<small lang="ja">前日</small></button>
-        <label for="timelineDate">Chọn ngày<small lang="ja">日付を選択</small><input id="timelineDate" type="date" value="${selectedTimelineDate()}"></label>
         <button type="button" class="button" data-action="timeline-today">Hôm nay<small lang="ja">今日</small></button>
         <button type="button" class="button" data-action="timeline-next">Ngày sau →<small lang="ja">翌日</small></button>
       </div>
@@ -751,7 +751,7 @@ function builderHTML() {
           <label class="field field-wide${errorClass('name')}" data-field="name"><span>Tên khách hàng</span><input id="formName" maxlength="80" value="${esc(state.form.name)}" aria-invalid="${!!state.form.errors.name}" placeholder="Ví dụ: Nguyễn Thị A">${errorText('name')}</label>
           <label class="field${errorClass('age')}" data-field="age"><span>Tuổi (tùy chọn)</span><input id="formAge" type="number" min="0" max="120" value="${esc(state.form.age)}" aria-invalid="${!!state.form.errors.age}" placeholder="—">${errorText('age')}</label>
           <label class="field${errorClass('sex')}" data-field="sex"><span>Giới tính</span><select id="formSex" aria-invalid="${!!state.form.errors.sex}"><option value="">Không chọn / 選択しない</option>${[['Nam','男性'],['Nữ','女性'],['Khác','その他']].map(([v,jp]) => `<option value="${v}" ${state.form.sex===v?'selected':''}>${v} / ${jp}</option>`).join('')}</select>${errorText('sex')}</label>
-          <label class="field${errorClass('appointmentDate')}" data-field="appointmentDate"><span>Ngày hẹn điều trị</span><input id="formAppointmentDate" type="date" value="${esc(state.form.appointmentDate)}" aria-invalid="${!!state.form.errors.appointmentDate}">${errorText('appointmentDate')}</label>
+          <label class="field${errorClass('appointmentDate')}" data-field="appointmentDate"><span>Ngày hẹn điều trị</span><div class="date-display-input"><span id="formAppointmentDateDisplay">${displayDate(state.form.appointmentDate)}</span><span aria-hidden="true">▦</span><input id="formAppointmentDate" type="date" value="${esc(state.form.appointmentDate)}" aria-label="Ngày hẹn điều trị" aria-invalid="${!!state.form.errors.appointmentDate}"></div>${errorText('appointmentDate')}</label>
           <label class="field${errorClass('start')}" data-field="start"><span>Giờ hẹn điều trị</span><input id="formStart" type="time" value="${esc(state.form.start)}" aria-invalid="${!!state.form.errors.start}">${errorText('start')}</label>
           <label class="field field-technician${errorClass('technician')}" data-field="technician"><span>Dr (tùy chọn)</span><input id="formTechnician" maxlength="80" value="${esc(state.form.technician)}" aria-invalid="${!!state.form.errors.technician}" placeholder="Ví dụ: Bác sĩ A">${errorText('technician')}</label>
           <div class="field field-room${errorClass('room')}" data-field="room"><span>Phòng điều trị</span><div class="room-options" role="group" aria-label="Phòng điều trị">${ROOMS.map(room => `<button type="button" class="room-option ${state.form.room === room.id ? 'selected' : ''}" data-action="set-room" data-room="${room.id}" aria-pressed="${state.form.room === room.id}"><span class="room-icon" aria-hidden="true">▣</span>${room.label}</button>`).join('')}</div>${errorText('room')}</div>
@@ -861,7 +861,7 @@ function builderSummaryHTML() {
         <div><small>Giới tính</small><span>${esc(state.form.sex || 'Chưa cập nhật')}</span></div>
         <div><small>Bác sĩ</small><span>${esc(state.form.technician.trim() || 'Chưa cập nhật')}</span></div>
         <div><small>Phòng điều trị</small><span class="room-badge">${esc(roomLabel(state.form.room))}</span></div>
-        <div><small>Ngày hẹn điều trị</small><span>${esc(state.form.appointmentDate || 'Chưa cập nhật')}</span></div>
+        <div><small>Ngày hẹn điều trị</small><span>${esc(displayDate(state.form.appointmentDate || 'Chưa cập nhật'))}</span></div>
         <div><small>Giờ hẹn điều trị</small><span>${esc(state.form.start || 'Chưa cập nhật')}</span></div>
       </div>
     </section>
@@ -1573,6 +1573,8 @@ document.addEventListener('input', e => {
     }
     if (t.id === 'formAppointmentDate') {
       state.form.appointmentDate = t.value;
+      const display = $('#formAppointmentDateDisplay');
+      if (display) display.textContent = displayDate(t.value);
       updateFormErrors('appointmentDate');
       $('#builderSummary').innerHTML = builderSummaryHTML();
     }
@@ -1607,6 +1609,8 @@ document.addEventListener('change', e => {
   }
   if (t.id === 'formAppointmentDate') {
     state.form.appointmentDate = t.value;
+    const display = $('#formAppointmentDateDisplay');
+    if (display) display.textContent = displayDate(t.value);
     updateFormErrors('appointmentDate');
     $('#builderSummary').innerHTML = builderSummaryHTML();
   }

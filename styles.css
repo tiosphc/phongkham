@@ -100,6 +100,10 @@ input,select,button{outline:none}
 .search-icon{position:absolute;left:14px;color:#92a4ab;font-weight:800}
 .search{width:100%;min-height:48px;border-radius:14px;border:1px solid var(--line);padding:0 14px 0 38px;background:#fbfdfe;color:var(--text);font-size:14px}
 .search:focus,input:focus,select:focus{border-color:#8db8c0;box-shadow:0 0 0 4px rgba(13,138,121,.09)}
+.date-display-input{position:relative;display:flex;align-items:center;justify-content:space-between;min-height:48px;padding:0 14px;border:1px solid var(--line-strong);border-radius:14px;background:#fbfdfe;color:var(--text);font-size:14px;font-weight:600;cursor:pointer}
+.date-display-input:focus-within{border-color:#8db8c0;box-shadow:0 0 0 4px rgba(13,138,121,.09)}
+.date-display-input input[type="date"]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
+.date-display-input input[type="date"]::-webkit-calendar-picker-indicator{position:absolute;inset:0;width:100%;height:100%;margin:0;cursor:pointer}
 
 .filterbar,.chip-wrap{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
 .filter,.chip{border:1px solid var(--line-strong);background:var(--surface);color:#5c707a;border-radius:999px;padding:10px 16px;font-size:13px;font-weight:850}
@@ -109,10 +113,13 @@ input,select,button{outline:none}
 .empty-box.compact{padding:26px 14px;font-size:14px}
 
 .timeline-scroll{overflow:auto;padding-bottom:4px}
-.timeline-date-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:16px 0}
+.timeline-date-controls{display:flex;align-items:end;gap:8px;flex-wrap:wrap;margin:16px 0}
 .timeline-date-controls .button{display:inline-flex;flex-direction:column;align-items:center;gap:2px;padding:8px 12px}
 .timeline-date-controls .button small,.timeline-date-controls label small{font-size:10px;font-weight:550}
 .timeline-date-controls label{display:flex;flex-direction:column;gap:3px;font-size:12px;font-weight:800;color:var(--muted)}
+.timeline-date-controls label{min-width:150px}
+.timeline-date-controls .date-display-input{min-height:42px;padding:0 10px;white-space:nowrap}
+.timeline-date-controls .button{min-height:42px}
 .timeline-date-controls input{min-height:38px;padding:5px 9px;border:1px solid var(--line-strong);border-radius:10px;background:#fff;color:var(--text);font:inherit}
 .timeline-date-controls strong{margin-left:auto;color:var(--teal-dark);font-size:14px}
 .dashboard-date-panel{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:16px 20px;margin:18px 0}
@@ -229,6 +236,10 @@ input,select,button{outline:none}
 .field.field-wide{grid-column:auto}
 .field span{font-size:12px;font-weight:900;letter-spacing:.1em;color:var(--muted);text-transform:uppercase}
 .field input,.field select{min-height:52px;border-radius:16px;border:1px solid var(--line);padding:0 14px;background:#fbfdfe;color:var(--text);font-size:15px}
+.field .date-display-input{min-height:52px;font-size:15px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--text)}
+.field .date-display-input>span{font-size:15px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--text)}
+.field .date-display-input input[type="date"]{border:0;padding:0;background:transparent;opacity:0}
+.field .date-display-input input[type="date"]::-webkit-calendar-picker-indicator{position:absolute;inset:0;width:100%;height:100%;margin:0;cursor:pointer}
 .builder-layout{display:grid;grid-template-columns:minmax(0,1.15fr) 390px;gap:18px;margin-top:18px;align-items:start}
 .builder-side{position:sticky;top:96px}
 
