@@ -486,7 +486,7 @@ function dashboardHTML() {
           <h2>Timeline trong ngày</h2>
           <p>Xem nhanh khung giờ của từng khách và phát hiện ca trùng nhau.</p>
         </div>
-        <span class="soft-pill">Viền: lịch hẹn · Màu: điều trị thực tế</span>
+        <div class="timeline-legend" aria-label="Chú giải timeline"><span><i class="legend-scheduled"></i>Viền: lịch hẹn</span><span><i class="legend-actual"></i>Màu đặc: điều trị thực tế</span><span><i class="legend-now"></i>Vạch đỏ: hiện tại</span></div>
       </div>
       <div id="timelineContent">${timelineHTML()}</div>
     </section>
@@ -599,8 +599,8 @@ function timelineHTML() {
           ${ordered.map(c => `
             <div class="timeline-name">
               <b>${esc(c.name)}</b>
-              <small class="timeline-scheduled-time">Hẹn ${esc(appointmentDay(c))} ${esc(c.start)} → ${esc(scheduledEnd(c))}</small>
-              <small class="timeline-actual-time">${c.actualStartedAt ? `Thực tế ${esc(clockFromEpoch(c.actualStartedAt, now))} → ${esc(actualEnd(c, now))}` : 'Chưa bắt đầu điều trị'}</small>
+              <small class="timeline-scheduled-time">Hẹn ${esc(c.start)}–${esc(scheduledEnd(c))}</small>
+              ${c.actualStartedAt ? `<small class="timeline-actual-time">Thực tế ${esc(clockFromEpoch(c.actualStartedAt, now))}–${c.running ? `Dự kiến ${esc(actualEnd(c, now))}` : esc(actualEnd(c, now))}</small>` : `<div class="timeline-waiting-state"><span class="timeline-waiting-badge">Chưa bắt đầu<small lang="ja">未開始</small></span>${lateBadgeHTML(c, now)}</div>`}
             </div>
           `).join('')}
         </div>
@@ -616,8 +616,8 @@ function timelineHTML() {
               const actualLeft = actual ? clamp((actual.start - lo * 60) / (span * 60) * 100, 0, 100) : 0;
               const actualRight = actual?.end == null ? actualLeft : clamp((actual.end - lo * 60) / (span * 60) * 100, 0, 100);
               return `<div class="timeline-row">
-                ${appointmentDay(c) === today ? `<span class="timeline-bar-label ${left > 80 ? 'right' : ''}" style="left:${left}%">Lịch ${esc(c.start)} → ${esc(scheduledEnd(c))} · ${Math.round(c.plannedSec/60)} phút</span><div class="timeline-bar scheduled" style="left:${left}%;width:${widthPct}%" aria-hidden="true"></div>` : ''}
-                ${actual ? `<span class="timeline-actual-label ${actualLeft > 80 ? 'right' : ''}" style="left:${actualLeft}%">${c.running ? 'Thực tế → dự kiến xong' : c.completed ? 'Thực tế → hoàn tất' : st === 'overdue' ? 'Quá giờ điều trị · tạm dừng' : 'Đã bắt đầu · tạm dừng'}</span>${actual.end != null && actualRight > actualLeft ? `<div class="timeline-bar actual ${st}" style="left:${actualLeft}%;width:${actualRight - actualLeft}%" aria-hidden="true"></div>` : actual.start >= 0 ? `<div class="timeline-actual-marker ${st}" style="left:${actualLeft}%" aria-hidden="true"></div>` : ''}` : `<span class="timeline-actual-label" style="left:${left}%">Chưa bắt đầu ${lateBadgeHTML(c, now)}</span>`}
+                ${appointmentDay(c) === today ? `<div class="timeline-bar scheduled" style="left:${left}%;width:${widthPct}%" aria-hidden="true"></div>` : ''}
+                ${actual ? (actual.end != null && actualRight > actualLeft ? `<div class="timeline-bar actual ${st}" style="left:${actualLeft}%;width:${actualRight - actualLeft}%" aria-hidden="true"></div>` : actual.start >= 0 ? `<div class="timeline-actual-marker ${st}" style="left:${actualLeft}%" aria-hidden="true"></div>` : '') : ''}
               </div>`;
             }).join('')}
             <div class="timeline-now" data-axis-start="${lo}" data-axis-span="${span}" style="left:${nowPct}%;${nowPct < 0 || nowPct > 100 ? 'display:none' : ''}"></div>
