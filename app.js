@@ -71,7 +71,6 @@ const state = {
   activeRoom: 'room_1',
   casePage: 1,
   caseSearch: '',
-  caseDateFilter: null,
   timelineDate: null,
   catalogSearch: '',
   catalogGroup: '',
@@ -162,18 +161,14 @@ function shiftTimelineDate(days) {
   state.timelineDate = date.toISOString().slice(0, 10);
 }
 function renderTimelineSelection() {
-  const input = $('#timelineDate');
-  if (input) input.value = selectedTimelineDate();
-  const label = $('#timelineDateLabel');
-  if (label) label.textContent = displayDate(selectedTimelineDate());
-  const content = $('#timelineContent');
-  if (content) content.innerHTML = timelineHTML();
-  const cases = $('#casesContent');
-  if (cases) cases.innerHTML = casesHTML();
-  const dateLabel = $('#caseDateFilterLabel');
-  if (dateLabel) dateLabel.textContent = state.caseDateFilter ? `Ngày hẹn: ${displayDate(state.caseDateFilter)}` : 'Tất cả ngày';
-  const allDates = $('#caseAllDates');
-  if (allDates) allDates.classList.toggle('active', !state.caseDateFilter);
+  state.casePage = 1;
+  render();
+}
+function caseAppointmentDate(c) {
+  return c.appointmentDate || vietnamDate(Date.parse(c.createdAt));
+}
+function casesForSelectedDate() {
+  return state.cases.filter(c => caseAppointmentDate(c) === selectedTimelineDate());
 }
 function scheduledStartEpoch(c) {
   const created = Date.parse(c.createdAt);
@@ -260,11 +255,12 @@ function concurrentRunningCount(c) {
 }
 function stats() {
   const now = TBVNSync.now();
+  const cases = casesForSelectedDate();
   return {
-    total: state.cases.length,
-    running: state.cases.filter(c => caseStatus(c, now) === 'running').length,
-    overdue: state.cases.filter(c => caseStatus(c, now) === 'overdue').length,
-    minutes: Math.round(state.cases.reduce((sum, c) => sum + c.plannedSec / 60, 0))
+    total: cases.length,
+    running: cases.filter(c => caseStatus(c, now) === 'running').length,
+    overdue: cases.filter(c => caseStatus(c, now) === 'overdue').length,
+    minutes: Math.round(cases.reduce((sum, c) => sum + c.plannedSec / 60, 0))
   };
 }
 function passesStatusFilter(c) {
@@ -283,10 +279,9 @@ function caseSearchText(c) {
 }
 function visibleCases() {
   const q = normalized(state.caseSearch.trim());
-  return state.cases.filter(c => {
+  return casesForSelectedDate().filter(c => {
     return passesStatusFilter(c) && (!q || caseSearchText(c).includes(q)) &&
-      (state.roomFilter === 'all' || c.room === state.roomFilter) &&
-      (!state.caseDateFilter || (c.appointmentDate || vietnamDate(Date.parse(c.createdAt))) === state.caseDateFilter);
+      (state.roomFilter === 'all' || c.room === state.roomFilter);
   });
 }
 
@@ -494,6 +489,16 @@ function dashboardHTML() {
       </div>
     </section>
 
+    <section class="panel dashboard-date-panel" aria-label="Chọn ngày Dashboard">
+      <div><strong>Ngày điều trị: ${displayDate(selectedTimelineDate())}</strong><small lang="ja">施術日を選択</small></div>
+      <div class="timeline-date-controls">
+        <button type="button" class="button" data-action="timeline-prev">← Ngày trước<small lang="ja">前日</small></button>
+        <label for="timelineDate">Chọn ngày<small lang="ja">日付を選択</small><input id="timelineDate" type="date" value="${selectedTimelineDate()}"></label>
+        <button type="button" class="button" data-action="timeline-today">Hôm nay<small lang="ja">今日</small></button>
+        <button type="button" class="button" data-action="timeline-next">Ngày sau →<small lang="ja">翌日</small></button>
+      </div>
+    </section>
+
     <section class="stats-grid">
       <article class="stat-card"><span class="stat-label">Tổng ca</span><b class="stat-value" data-stat="total">${s.total}</b><small>Đang theo dõi trên các thiết bị</small></article>
       <article class="stat-card"><span class="stat-label">Đang chạy</span><b class="stat-value" data-stat="running">${s.running}</b><small>Đồng hồ đang hoạt động</small></article>
@@ -513,13 +518,6 @@ function dashboardHTML() {
           <p>Xem nhanh khung giờ của từng khách và phát hiện ca trùng nhau.</p>
         </div>
         <div class="timeline-legend" aria-label="Chú giải timeline"><span><i class="legend-scheduled"></i>Viền: lịch hẹn</span><span><i class="legend-actual"></i>Màu đặc: điều trị thực tế</span><span><i class="legend-now"></i>Vạch đỏ: hiện tại</span></div>
-      </div>
-      <div class="timeline-date-controls" aria-label="Chọn ngày Timeline">
-        <button type="button" class="button" data-action="timeline-prev">← Ngày trước<small lang="ja">前日</small></button>
-        <label for="timelineDate">Chọn ngày<small lang="ja">日付を選択</small><input id="timelineDate" type="date" value="${selectedTimelineDate()}"></label>
-        <button type="button" class="button" data-action="timeline-today">Hôm nay<small lang="ja">今日</small></button>
-        <button type="button" class="button" data-action="timeline-next">Ngày sau →<small lang="ja">翌日</small></button>
-        <strong id="timelineDateLabel">${displayDate(selectedTimelineDate())}</strong>
       </div>
       <div id="timelineContent">${timelineHTML()}</div>
     </section>
@@ -541,7 +539,6 @@ function dashboardHTML() {
       <div class="filterbar room-filterbar" aria-label="Lọc theo phòng điều trị">
         ${[['all','Tất cả phòng'],...ROOMS.map(room => [room.id,room.label])].map(([id,label]) => `<button class="filter ${state.roomFilter===id?'active':''}" data-action="room-filter" data-room="${id}">${label}</button>`).join('')}
       </div>
-      <div class="case-date-filter"><span id="caseDateFilterLabel">${state.caseDateFilter ? `Ngày hẹn: ${displayDate(state.caseDateFilter)}` : 'Tất cả ngày'}</span><button type="button" class="filter ${state.caseDateFilter ? '' : 'active'}" id="caseAllDates" data-action="case-all-dates">Tất cả ngày<small lang="ja">すべての日付</small></button></div>
       <div id="casesContent">${casesHTML()}</div>
     </section>
   `;
@@ -550,7 +547,7 @@ function dashboardHTML() {
 function roomBoardHTML() {
   const now = TBVNSync.now();
   const activeByRoom = Object.fromEntries(ROOMS.map(room => [room.id,
-    state.cases.filter(c => c.room === room.id && !c.completed).sort((a, b) => {
+    casesForSelectedDate().filter(c => c.room === room.id && !c.completed).sort((a, b) => {
       const key = c => {
         const status = caseStatus(c, now);
         if (c.running && status === 'overdue') return [0, caseLeft(c, now)];
@@ -600,11 +597,7 @@ function timelineHTML() {
     return { start, end };
   };
   const appointmentDay = c => c.appointmentDate || vietnamDate(Date.parse(c.createdAt));
-  const todayCases = state.cases.filter(c => {
-    const actual = actualRange(c);
-    return appointmentDay(c) === today || (actual && actual.start < 1440 &&
-      (actual.end == null ? actual.start >= 0 : actual.end >= 0));
-  });
+  const todayCases = casesForSelectedDate();
   if (!todayCases.length) return `<div class="empty-box" data-timeline-day="${today}">Không có ca điều trị ngày ${displayDate(today)}.</div>`;
   const lows = [480, ...todayCases.filter(c => appointmentDay(c) === today).map(c => startMinutes(c.start))];
   const highs = [1200, ...todayCases.filter(c => appointmentDay(c) === today).map(c => startMinutes(c.start) + c.plannedSec / 60)];
@@ -1335,7 +1328,6 @@ function jumpToCase(id) {
     return;
   }
   if (state.roomFilter !== 'all' && state.roomFilter !== c.room) state.roomFilter = 'all';
-  if (state.caseDateFilter && state.caseDateFilter !== (c.appointmentDate || vietnamDate(Date.parse(c.createdAt)))) state.caseDateFilter = null;
   if (!passesStatusFilter(c)) state.filter = 'all';
   const query = normalized(state.caseSearch.trim());
   if (query && !caseSearchText(c).includes(query)) state.caseSearch = '';
@@ -1400,25 +1392,14 @@ document.addEventListener('click', e => {
   switch (action) {
     case 'timeline-prev':
       shiftTimelineDate(-1);
-      state.caseDateFilter = selectedTimelineDate();
-      state.casePage = 1;
       renderTimelineSelection();
       break;
     case 'timeline-today':
       state.timelineDate = null;
-      state.caseDateFilter = selectedTimelineDate();
-      state.casePage = 1;
       renderTimelineSelection();
       break;
     case 'timeline-next':
       shiftTimelineDate(1);
-      state.caseDateFilter = selectedTimelineDate();
-      state.casePage = 1;
-      renderTimelineSelection();
-      break;
-    case 'case-all-dates':
-      state.caseDateFilter = null;
-      state.casePage = 1;
       renderTimelineSelection();
       break;
     case 'nav':
@@ -1612,8 +1593,6 @@ document.addEventListener('change', e => {
   if (e.target.id === 'timelineDate') {
     if (validIsoDate(e.target.value)) {
       state.timelineDate = e.target.value;
-      state.caseDateFilter = selectedTimelineDate();
-      state.casePage = 1;
       renderTimelineSelection();
     }
     return;
