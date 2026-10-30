@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#f5f8fa" />
+  <meta name="description" content="TBVN Treatment Timeline - Theo dõi thời lượng kỹ thuật, ước tính thời gian và chạy đồng hồ cho nhiều ca điều trị." />
+  <title>TBVN · Điều phối thời gian điều trị</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="stylesheet" href="styles.css?v=scheduled-start-2" />
+  <script defer src="catalog.js"></script>
+  <script defer src="bilingual.js?v=scheduled-start-2"></script>
+  <script defer src="vendor/supabase.js"></script>
+  <script defer src="config.js"></script>
+  <script defer src="sync.js"></script>
+  <script defer src="navigation.js"></script>
+  <script defer src="app.js?v=scheduled-start-2"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar" aria-label="Thanh điều hướng">
+      <a class="brand" href="#" id="homeLink" aria-label="TBVN - Trang điều phối">
+        <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 36 36" fill="none"><path d="M18 6v24M6 18h24" stroke="white" stroke-width="6" stroke-linecap="round"/><circle cx="18" cy="18" r="4" fill="#87F2D4"/></svg></span>
+        <span class="brand-copy"><strong>TBVN<span class="brand-dot">.</span></strong><small>TREATMENT TIMELINE</small></span>
+      </a>
+      <nav class="tabs" aria-label="Chức năng chính">
+        <button type="button" class="tab is-active" data-action="nav" data-view="dashboard" aria-current="page"><span class="tab-icon" aria-hidden="true">▦</span> Bảng điều phối</button>
+        <button type="button" class="tab" data-action="nav" data-view="catalog"><span class="tab-icon" aria-hidden="true">▤</span> Bảng thời lượng</button>
+      </nav>
+      <div class="topbar-right"><span class="mode-pill"><i></i> Đang kết nối dữ liệu</span><button type="button" class="button button-primary top-add" data-action="open-new"><span class="plus">＋</span> Tạo ca mới</button></div>
+    </header>
+    <main class="main" id="mainContent"></main>
+    <footer class="footer"><span>TBVN · Treatment Timeline</span><span>Ca điều trị được đồng bộ và tự hết hạn sau 30 ngày</span></footer>
+  </div>
+  <div id="modalRoot"></div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
