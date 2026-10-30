@@ -71,6 +71,7 @@ const state = {
   activeRoom: 'room_1',
   casePage: 1,
   caseSearch: '',
+  timelineDate: null,
   catalogSearch: '',
   catalogGroup: '',
   catalogActiveTechId: TECHS[0]?.stt || '',
@@ -153,6 +154,20 @@ function validIsoDate(value) {
   const date = new Date(`${value}T00:00:00Z`);
   return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
+function selectedTimelineDate() { return state.timelineDate || vietnamDate(); }
+function shiftTimelineDate(days) {
+  const date = new Date(`${selectedTimelineDate()}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  state.timelineDate = date.toISOString().slice(0, 10);
+}
+function renderTimelineSelection() {
+  const input = $('#timelineDate');
+  if (input) input.value = selectedTimelineDate();
+  const label = $('#timelineDateLabel');
+  if (label) label.textContent = displayDate(selectedTimelineDate());
+  const content = $('#timelineContent');
+  if (content) content.innerHTML = timelineHTML();
+}
 function scheduledStartEpoch(c) {
   const created = Date.parse(c.createdAt);
   const date = c.appointmentDate || vietnamDate(Number.isFinite(created) ? created : TBVNSync.now());
@@ -179,6 +194,9 @@ function caseStatus(c, now = TBVNSync.now()) {
 }
 function scheduledEnd(c) {
   return clockFromEpoch(scheduledStartEpoch(c) + c.plannedSec * 1000);
+}
+function displayDate(date) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) ? `${date.slice(8,10)}/${date.slice(5,7)}/${date.slice(0,4)}` : date;
 }
 function clockFromEpoch(epoch, now = TBVNSync.now()) {
   if (!Number.isFinite(epoch)) return 'Chưa xác định';
@@ -219,7 +237,7 @@ function dateDefault() {
   return vietnamDate(now + (mins >= 1440 ? 86400000 : 0));
 }
 function countdownBaseline(c) {
-  return c.plannedSec + (c.actualStartedAt ? Math.max(0, (scheduledStartEpoch(c) - c.actualStartedAt) / 1000) : 0);
+  return c.plannedSec;
 }
 function scheduledOverlapCount(c) {
   const a = scheduledStartEpoch(c);
@@ -488,6 +506,13 @@ function dashboardHTML() {
         </div>
         <div class="timeline-legend" aria-label="Chú giải timeline"><span><i class="legend-scheduled"></i>Viền: lịch hẹn</span><span><i class="legend-actual"></i>Màu đặc: điều trị thực tế</span><span><i class="legend-now"></i>Vạch đỏ: hiện tại</span></div>
       </div>
+      <div class="timeline-date-controls" aria-label="Chọn ngày Timeline">
+        <button type="button" class="button" data-action="timeline-prev">← Ngày trước<small lang="ja">前日</small></button>
+        <label for="timelineDate">Chọn ngày<small lang="ja">日付を選択</small><input id="timelineDate" type="date" value="${selectedTimelineDate()}"></label>
+        <button type="button" class="button" data-action="timeline-today">Hôm nay<small lang="ja">今日</small></button>
+        <button type="button" class="button" data-action="timeline-next">Ngày sau →<small lang="ja">翌日</small></button>
+        <strong id="timelineDateLabel">${displayDate(selectedTimelineDate())}</strong>
+      </div>
       <div id="timelineContent">${timelineHTML()}</div>
     </section>
 
@@ -551,18 +576,18 @@ function roomBoardHTML() {
 }
 
 function timelineHTML() {
+  const today = selectedTimelineDate();
   if (!state.cases.length) {
-    return `<div class="empty-box" data-timeline-day="${vietnamDate()}">Chưa có ca nào. Bấm “Tạo ca mới” để xem timeline trong ngày.</div>`;
+    return `<div class="empty-box" data-timeline-day="${today}">Không có ca điều trị ngày ${displayDate(today)}.</div>`;
   }
   const now = TBVNSync.now();
-  const today = vietnamDate(now);
   const dayStart = Date.parse(`${today}T00:00:00+07:00`);
   const minuteOfDay = epoch => (epoch - dayStart) / 60000;
   const actualRange = c => {
     if (!c.started || !Number.isFinite(c.actualStartedAt)) return null;
     const start = minuteOfDay(c.actualStartedAt);
     const end = c.completed && c.finishedAt ? minuteOfDay(c.finishedAt)
-      : c.running && c.deadline ? minuteOfDay(Math.max(c.deadline, now)) : null;
+      : c.running && c.deadline ? minuteOfDay(c.deadline) : null;
     return { start, end };
   };
   const appointmentDay = c => c.appointmentDate || vietnamDate(Date.parse(c.createdAt));
@@ -571,7 +596,7 @@ function timelineHTML() {
     return appointmentDay(c) === today || (actual && actual.start < 1440 &&
       (actual.end == null ? actual.start >= 0 : actual.end >= 0));
   });
-  if (!todayCases.length) return `<div class="empty-box" data-timeline-day="${today}">Không có ca điều trị trong ngày hôm nay.</div>`;
+  if (!todayCases.length) return `<div class="empty-box" data-timeline-day="${today}">Không có ca điều trị ngày ${displayDate(today)}.</div>`;
   const lows = [480, ...todayCases.filter(c => appointmentDay(c) === today).map(c => startMinutes(c.start))];
   const highs = [1200, ...todayCases.filter(c => appointmentDay(c) === today).map(c => startMinutes(c.start) + c.plannedSec / 60)];
   todayCases.forEach(c => {
@@ -620,7 +645,7 @@ function timelineHTML() {
                 ${actual ? (actual.end != null && actualRight > actualLeft ? `<div class="timeline-bar actual ${st}" style="left:${actualLeft}%;width:${actualRight - actualLeft}%" aria-hidden="true"></div>` : actual.start >= 0 ? `<div class="timeline-actual-marker ${st}" style="left:${actualLeft}%" aria-hidden="true"></div>` : '') : ''}
               </div>`;
             }).join('')}
-            <div class="timeline-now" data-axis-start="${lo}" data-axis-span="${span}" style="left:${nowPct}%;${nowPct < 0 || nowPct > 100 ? 'display:none' : ''}"></div>
+            <div class="timeline-now" data-axis-start="${lo}" data-axis-span="${span}" style="left:${nowPct}%;${today !== vietnamDate(now) || nowPct < 0 || nowPct > 100 ? 'display:none' : ''}"></div>
           </div>
         </div>
       </div>
@@ -649,17 +674,17 @@ function caseCardHTML(c) {
   const total = Math.round(c.plannedSec / 60);
   const scheduleOverlap = scheduledOverlapCount(c);
   const concurrent = concurrentRunningCount(c);
-  const expanded = state.expanded.has(c.id);
+  const date = displayDate(c.appointmentDate || vietnamDate(Date.parse(c.createdAt)));
   return `
     <article class="case-card ${highlightedCaseId === c.id ? 'case-highlight-target' : ''}" id="case-${esc(c.id)}" data-case-id="${esc(c.id)}" tabindex="-1">
       <div class="case-head">
         <div class="case-id">${initials(c.name)}</div>
         <div class="case-meta">
           <h3>${esc(c.name)}</h3>
-          <p>${[c.sex, c.age ? `${c.age} tuổi` : '', `Hẹn ${c.appointmentDate || vietnamDate(Date.parse(c.createdAt))} ${c.start}`].filter(Boolean).join(' · ')}</p>
-          <div class="case-assignment"><span class="room-badge">${esc(roomLabel(c.room))}</span><span class="doctor-display">Dr: ${esc(c.technician || 'Chưa cập nhật')}<small lang="ja">医師</small></span></div>
+          <p>${[c.sex, c.age ? `${c.age} tuổi` : '', `Hẹn ${date} ${c.start}`].filter(Boolean).join(' · ')}</p>
+          <div class="case-assignment"><span class="room-badge" data-room="${esc(c.room || '')}">${esc(roomLabel(c.room))}</span><span class="doctor-display">Dr: ${esc(c.technician || 'Chưa cập nhật')}<small lang="ja">医師</small></span></div>
           ${lateBadgeHTML(c)}
-          <div class="case-time-facts"><small>Theo lịch: ${esc(c.appointmentDate || vietnamDate(Date.parse(c.createdAt)))} ${esc(c.start)} → ${esc(scheduledEnd(c))}</small><small>Bắt đầu thực tế: ${c.actualStartedAt ? esc(clockFromEpoch(c.actualStartedAt)) : 'Chưa bắt đầu'}</small><small>${c.completed ? 'Hoàn tất thực tế' : 'Kết thúc điều trị dự kiến'}: ${esc(actualEnd(c))}</small></div>
+          <div class="case-time-facts"><span class="time-fact scheduled">Theo lịch: ${date} ${esc(c.start)} → ${esc(scheduledEnd(c))}<small lang="ja">予約時間</small></span><span class="time-fact started">Bắt đầu thực tế: ${c.actualStartedAt ? esc(clockFromEpoch(c.actualStartedAt)) : 'Chưa bắt đầu'}<small lang="ja">実際の開始</small></span><span class="time-fact ${c.completed ? 'finished' : 'expected'}">${c.completed ? 'Hoàn tất thực tế' : 'Kết thúc điều trị dự kiến'}: ${esc(actualEnd(c))}<small lang="ja">${c.completed ? '実際の終了' : '終了予定'}</small></span></div>
         </div>
         <span class="status ${st}" data-status="${c.id}">${statusText(st)}</span>
       </div>
@@ -685,7 +710,7 @@ function caseCardHTML(c) {
       </div>`}
 
       <div class="case-sub-controls">
-        <button class="text-btn" data-action="expand" data-id="${c.id}">${expanded ? 'Ẩn chi tiết' : 'Xem chi tiết'}</button>
+        <button class="text-btn" data-action="expand" data-id="${c.id}">Xem chi tiết</button>
         <div class="inline-actions">
           <button class="text-btn" data-action="edit" data-id="${c.id}">Sửa</button>
           ${c.completed ? '' : `<button class="text-btn" data-action="finish" data-id="${c.id}">Hoàn tất</button>`}
@@ -693,15 +718,6 @@ function caseCardHTML(c) {
         </div>
       </div>
 
-      ${expanded ? `
-        <div class="case-detail-list">
-          ${c.items.map(item => {
-            const svc = SERVICE_BY[item.id];
-            const qtyText = item.perUnit ? ` · ${item.qty} nốt` : '';
-            return `<div class="case-detail-item"><b>${esc(svc.vi)}${svc.jp ? `<small lang="ja">${esc(svc.jp)}</small>` : ''}</b><span>${esc(svc.tech)} · ${item.minutes} phút${qtyText}</span></div>`;
-          }).join('')}
-        </div>
-      ` : ''}
     </article>
   `;
 }
@@ -1200,10 +1216,10 @@ function refreshLive() {
     const current = Number(date.hour) * 60 + Number(date.minute) + Number(date.second) / 60;
     const position = (current - Number(nowMarker.dataset.axisStart) * 60) / (Number(nowMarker.dataset.axisSpan) * 60) * 100;
     nowMarker.style.left = `${position}%`;
-    nowMarker.style.display = position < 0 || position > 100 ? 'none' : '';
+    nowMarker.style.display = selectedTimelineDate() !== vietnamDate(now) || position < 0 || position > 100 ? 'none' : '';
   }
-  if ($('#timelineContent [data-timeline-day]')?.dataset.timelineDay !== vietnamDate(now)) {
-    $('#timelineContent').innerHTML = timelineHTML();
+  if ($('#timelineContent [data-timeline-day]')?.dataset.timelineDay !== selectedTimelineDate()) {
+    renderTimelineSelection();
   }
   if (changedStatus || lateFilterChanged) {
     const cases = $('#casesContent');
@@ -1244,6 +1260,30 @@ function renderCatalogPanels() {
 }
 
 let deleteReturnFocus = null;
+function openCaseDetailDialog(c, trigger) {
+  const root = $('#modalRoot');
+  root.innerHTML = `<dialog class="confirm-dialog case-detail-dialog" aria-labelledby="caseDetailTitle">
+    <div class="confirm-dialog-content">
+      <div class="case-detail-header"><h2 id="caseDetailTitle">${esc(c.name)}<small lang="ja">施術詳細</small></h2><button type="button" class="button" data-action="close-case-detail" aria-label="Đóng chi tiết">×</button></div>
+      <div class="case-detail-summary"><span class="room-badge" data-room="${esc(c.room || '')}">${esc(roomLabel(c.room))}</span><span>${esc(statusText(caseStatus(c)))}</span></div>
+      <div class="case-detail-list">${c.items.map(item => {
+        const svc = SERVICE_BY[item.id];
+        const qtyText = item.perUnit ? ` · ${item.qty} nốt` : '';
+        return `<div class="case-detail-item"><b>${esc(svc.vi)}${svc.jp ? `<small lang="ja">${esc(svc.jp)}</small>` : ''}</b><span>${esc(svc.tech)} · ${item.minutes} phút${qtyText}</span></div>`;
+      }).join('')}</div>
+    </div>
+  </dialog>`;
+  const dialog = root.querySelector('dialog');
+  dialog.addEventListener('close', () => {
+    root.replaceChildren();
+    if (trigger.isConnected) trigger.focus();
+  }, { once: true });
+  dialog.addEventListener('click', event => {
+    if (event.target === dialog) dialog.close();
+  });
+  dialog.showModal();
+  dialog.querySelector('[data-action="close-case-detail"]').focus();
+}
 function openDeleteDialog(c, trigger) {
   if (state.syncBusy || !c) return;
   deleteReturnFocus = trigger;
@@ -1348,6 +1388,18 @@ document.addEventListener('click', e => {
   const c = id ? state.cases.find(item => item.id === id) : null;
 
   switch (action) {
+    case 'timeline-prev':
+      shiftTimelineDate(-1);
+      renderTimelineSelection();
+      break;
+    case 'timeline-today':
+      state.timelineDate = null;
+      renderTimelineSelection();
+      break;
+    case 'timeline-next':
+      shiftTimelineDate(1);
+      renderTimelineSelection();
+      break;
     case 'nav':
       state.view = b.dataset.view;
       TBVNRouter.push({ view: state.view });
@@ -1466,8 +1518,10 @@ document.addEventListener('click', e => {
       if (c) initForm(c);
       break;
     case 'expand':
-      if (state.expanded.has(id)) state.expanded.delete(id); else state.expanded.add(id);
-      render();
+      if (c) openCaseDetailDialog(c, b);
+      break;
+    case 'close-case-detail':
+      $('#modalRoot dialog')?.close();
       break;
     case 'catalog-group':
       state.catalogGroup = b.dataset.group;
@@ -1534,6 +1588,13 @@ document.addEventListener('input', e => {
 });
 
 document.addEventListener('change', e => {
+  if (e.target.id === 'timelineDate') {
+    if (validIsoDate(e.target.value)) {
+      state.timelineDate = e.target.value;
+      renderTimelineSelection();
+    }
+    return;
+  }
   if (!state.form) return;
   const t = e.target;
   if (t.id === 'formSex') { state.form.sex = t.value; updateFormErrors('sex'); $('#builderSummary').innerHTML = builderSummaryHTML(); }
