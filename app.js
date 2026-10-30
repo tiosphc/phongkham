@@ -58,6 +58,7 @@ const ROOMS = [
 ];
 const ROOM_BY = Object.fromEntries(ROOMS.map(room => [room.id, room]));
 const roomLabel = room => ROOM_BY[room]?.label || 'Chưa phân phòng';
+const CASES_PER_PAGE = 6;
 
 const state = {
   cases: [],
@@ -67,6 +68,8 @@ const state = {
   view: 'dashboard',
   filter: 'all',
   roomFilter: 'all',
+  activeRoom: 'room_1',
+  casePage: 1,
   caseSearch: '',
   catalogSearch: '',
   catalogGroup: '',
@@ -235,21 +238,25 @@ function stats() {
     minutes: Math.round(state.cases.reduce((sum, c) => sum + c.plannedSec / 60, 0))
   };
 }
+function passesStatusFilter(c) {
+  const status = caseStatus(c);
+  return state.filter === 'all' || {
+    running: status === 'running',
+    waiting: status === 'waiting',
+    late: status === 'waiting' && appointmentDelayMinutes(c) > 0,
+    paused: status === 'paused',
+    overdue: status === 'overdue',
+    done: status === 'done'
+  }[state.filter];
+}
+function caseSearchText(c) {
+  return normalized(c.name + ' ' + c.technician + ' ' + c.items.map(it => SERVICE_BY[it.id]?.vi || '').join(' '));
+}
 function visibleCases() {
   const q = normalized(state.caseSearch.trim());
   return state.cases.filter(c => {
-    const status = caseStatus(c);
-    const passFilter = state.filter === 'all' || {
-      running: status === 'running',
-      waiting: status === 'waiting',
-      late: status === 'waiting' && appointmentDelayMinutes(c) > 0,
-      paused: status === 'paused',
-      overdue: status === 'overdue',
-      done: status === 'done'
-    }[state.filter];
-    const text = normalized(c.name + ' ' + c.technician + ' ' + c.items.map(it => SERVICE_BY[it.id]?.vi || '').join(' '));
-    const passSearch = !q || text.includes(q);
-    return passFilter && passSearch && (state.roomFilter === 'all' || c.room === state.roomFilter);
+    return passesStatusFilter(c) && (!q || caseSearchText(c).includes(q)) &&
+      (state.roomFilter === 'all' || c.room === state.roomFilter);
   });
 }
 
@@ -424,6 +431,8 @@ function renderNav() {
   });
 }
 function render() {
+  const roomScrolls = new Map(Array.from(document.querySelectorAll('.room-case-list'))
+    .map(list => [list.dataset.room, list.scrollTop]));
   const mode = document.querySelector('.mode-pill');
   if (mode) mode.innerHTML = `<i></i> ${state.connection === 'ready' && !state.syncError ? 'Đã kết nối dữ liệu' : 'Đồng bộ gián đoạn'}`;
   renderNav();
@@ -431,6 +440,9 @@ function render() {
   if (state.view === 'builder' && state.form) main.innerHTML = builderHTML();
   else if (state.view === 'catalog') main.innerHTML = catalogHTML();
   else main.innerHTML = dashboardHTML();
+  document.querySelectorAll('.room-case-list').forEach(list => {
+    list.scrollTop = roomScrolls.get(list.dataset.room) || 0;
+  });
   const message = state.connection === 'loading' ? 'Đang tải dữ liệu từ Supabase…' : state.syncError;
   if (message) main.insertAdjacentHTML('afterbegin', `<div class="sync-alert" role="status">${esc(message)} ${state.connection !== 'loading' ? '<button class="text-btn" data-action="retry-sync">Tải lại</button>' : ''}</div>`);
   document.querySelectorAll('[data-action="open-new"]').forEach(button => button.disabled = state.connection !== 'ready');
