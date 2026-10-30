@@ -71,6 +71,7 @@ const state = {
   activeRoom: 'room_1',
   casePage: 1,
   caseSearch: '',
+  caseDateFilter: null,
   timelineDate: null,
   catalogSearch: '',
   catalogGroup: '',
@@ -167,6 +168,12 @@ function renderTimelineSelection() {
   if (label) label.textContent = displayDate(selectedTimelineDate());
   const content = $('#timelineContent');
   if (content) content.innerHTML = timelineHTML();
+  const cases = $('#casesContent');
+  if (cases) cases.innerHTML = casesHTML();
+  const dateLabel = $('#caseDateFilterLabel');
+  if (dateLabel) dateLabel.textContent = state.caseDateFilter ? `Ngày hẹn: ${displayDate(state.caseDateFilter)}` : 'Tất cả ngày';
+  const allDates = $('#caseAllDates');
+  if (allDates) allDates.classList.toggle('active', !state.caseDateFilter);
 }
 function scheduledStartEpoch(c) {
   const created = Date.parse(c.createdAt);
@@ -278,7 +285,8 @@ function visibleCases() {
   const q = normalized(state.caseSearch.trim());
   return state.cases.filter(c => {
     return passesStatusFilter(c) && (!q || caseSearchText(c).includes(q)) &&
-      (state.roomFilter === 'all' || c.room === state.roomFilter);
+      (state.roomFilter === 'all' || c.room === state.roomFilter) &&
+      (!state.caseDateFilter || (c.appointmentDate || vietnamDate(Date.parse(c.createdAt))) === state.caseDateFilter);
   });
 }
 
@@ -533,6 +541,7 @@ function dashboardHTML() {
       <div class="filterbar room-filterbar" aria-label="Lọc theo phòng điều trị">
         ${[['all','Tất cả phòng'],...ROOMS.map(room => [room.id,room.label])].map(([id,label]) => `<button class="filter ${state.roomFilter===id?'active':''}" data-action="room-filter" data-room="${id}">${label}</button>`).join('')}
       </div>
+      <div class="case-date-filter"><span id="caseDateFilterLabel">${state.caseDateFilter ? `Ngày hẹn: ${displayDate(state.caseDateFilter)}` : 'Tất cả ngày'}</span><button type="button" class="filter ${state.caseDateFilter ? '' : 'active'}" id="caseAllDates" data-action="case-all-dates">Tất cả ngày<small lang="ja">すべての日付</small></button></div>
       <div id="casesContent">${casesHTML()}</div>
     </section>
   `;
@@ -1326,6 +1335,7 @@ function jumpToCase(id) {
     return;
   }
   if (state.roomFilter !== 'all' && state.roomFilter !== c.room) state.roomFilter = 'all';
+  if (state.caseDateFilter && state.caseDateFilter !== (c.appointmentDate || vietnamDate(Date.parse(c.createdAt)))) state.caseDateFilter = null;
   if (!passesStatusFilter(c)) state.filter = 'all';
   const query = normalized(state.caseSearch.trim());
   if (query && !caseSearchText(c).includes(query)) state.caseSearch = '';
@@ -1390,14 +1400,25 @@ document.addEventListener('click', e => {
   switch (action) {
     case 'timeline-prev':
       shiftTimelineDate(-1);
+      state.caseDateFilter = selectedTimelineDate();
+      state.casePage = 1;
       renderTimelineSelection();
       break;
     case 'timeline-today':
       state.timelineDate = null;
+      state.caseDateFilter = selectedTimelineDate();
+      state.casePage = 1;
       renderTimelineSelection();
       break;
     case 'timeline-next':
       shiftTimelineDate(1);
+      state.caseDateFilter = selectedTimelineDate();
+      state.casePage = 1;
+      renderTimelineSelection();
+      break;
+    case 'case-all-dates':
+      state.caseDateFilter = null;
+      state.casePage = 1;
       renderTimelineSelection();
       break;
     case 'nav':
@@ -1591,6 +1612,8 @@ document.addEventListener('change', e => {
   if (e.target.id === 'timelineDate') {
     if (validIsoDate(e.target.value)) {
       state.timelineDate = e.target.value;
+      state.caseDateFilter = selectedTimelineDate();
+      state.casePage = 1;
       renderTimelineSelection();
     }
     return;
