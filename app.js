@@ -80,6 +80,10 @@ const state = {
 
 let audioCtx = null;
 let toastId = null;
+let highlightedCaseId = null;
+let jumpSequence = 0;
+let jumpDelayTimer = null;
+let highlightTimer = null;
 
 function enableSound() {
   try {
@@ -510,12 +514,40 @@ function dashboardHTML() {
 }
 
 function roomBoardHTML() {
-  return `<div class="room-board">${ROOMS.map(room => {
-    const active = state.cases.filter(c => c.room === room.id && !c.completed);
-    return `<section class="room-panel"><div class="room-panel-head"><span class="room-icon" aria-hidden="true">▣</span><h3>${room.label}</h3><span class="room-count">${active.length}</span></div>
-      ${active.length ? active.map(c => `<div class="room-case"><strong>${esc(c.name)}</strong><small class="doctor-display">Dr: ${esc(c.technician || 'Chưa cập nhật')}<span lang="ja">医師</span></small><span class="status ${caseStatus(c)}">${statusText(caseStatus(c))}</span>${lateBadgeHTML(c)}<small>Hẹn: ${esc(c.appointmentDate || vietnamDate(Date.parse(c.createdAt)))} ${esc(c.start)} · Theo lịch: ${esc(scheduledEnd(c))}</small><small>Bắt đầu thực tế: ${c.actualStartedAt ? esc(clockFromEpoch(c.actualStartedAt)) : 'Chưa bắt đầu'}</small><div class="room-case-time"><span data-room-clock="${c.id}">${formatTimer(caseLeft(c))}</span><small>${c.started ? 'Kết thúc thực tế/dự kiến: ' + esc(actualEnd(c)) : 'Đồng hồ chưa chạy'}</small></div></div>`).join('') : '<p class="room-empty">Chưa có ca hoạt động</p>'}
-    </section>`;
-  }).join('')}</div>`;
+  const now = TBVNSync.now();
+  const activeByRoom = Object.fromEntries(ROOMS.map(room => [room.id,
+    state.cases.filter(c => c.room === room.id && !c.completed).sort((a, b) => {
+      const key = c => {
+        const status = caseStatus(c, now);
+        if (c.running && status === 'overdue') return [0, caseLeft(c, now)];
+        if (c.running) return [1, caseLeft(c, now)];
+        if (c.started) return [2, caseLeft(c, now)];
+        const delay = appointmentDelayMinutes(c, now);
+        return delay ? [3, -delay] : [4, scheduledStartEpoch(c)];
+      };
+      const left = key(a), right = key(b);
+      return left[0] - right[0] || left[1] - right[1] || String(a.id).localeCompare(String(b.id));
+    })]));
+  return `<div class="room-mobile-tabs" role="group" aria-label="Chọn phòng điều trị">${ROOMS.map(room =>
+    `<button type="button" class="room-mobile-tab ${state.activeRoom === room.id ? 'active' : ''}" data-action="select-room-tab" data-room="${room.id}" aria-pressed="${state.activeRoom === room.id}">${room.label}<small>${activeByRoom[room.id].length} ca</small><small lang="ja">${activeByRoom[room.id].length}件</small></button>`).join('')}</div>
+    <div class="room-board">${ROOMS.map(room => {
+      const active = activeByRoom[room.id];
+      const running = active.filter(c => c.running).length;
+      return `<section class="room-panel ${state.activeRoom === room.id ? 'is-mobile-active' : ''}" data-room-panel="${room.id}">
+        <div class="room-panel-head"><span class="room-icon" aria-hidden="true">▣</span><div><h3>${room.label}</h3><small>${active.length} ca · ${running} đang chạy · ${active.length - running} đang chờ</small></div></div>
+        <div class="room-case-list" data-room="${room.id}">${active.length ? active.map(c => {
+          const status = caseStatus(c, now);
+          const late = appointmentDelayMinutes(c, now);
+          return `<button type="button" class="room-case" data-action="jump-case" data-id="${esc(c.id)}" aria-label="Xem ca ${esc(c.name)} trong danh sách ca điều trị">
+            <span class="room-case-top"><strong>${esc(c.name)}</strong><span class="room-case-arrow" aria-hidden="true">↘</span></span>
+            <span class="room-case-doctor">Dr: ${esc(c.technician || 'Chưa cập nhật')}<small lang="ja">医師</small></span>
+            <span class="room-case-middle"><b data-room-clock="${esc(c.id)}">${formatTimer(caseLeft(c, now))}</b><span class="status ${status}">${statusText(status)}</span></span>
+            ${late ? `<span class="room-case-late" data-late="${esc(c.id)}">Trễ bắt đầu ${late} phút<small lang="ja">開始遅れ ${late}分</small></span>` : ''}
+            <span class="room-case-end">${c.started ? 'Dự kiến xong' : 'Theo lịch'}: ${esc(c.started ? actualEnd(c, now) : scheduledEnd(c))}</span>
+          </button>`;
+        }).join('') : '<p class="room-empty">Chưa có ca hoạt động</p>'}</div>
+      </section>`;
+    }).join('')}</div>`;
 }
 
 function timelineHTML() {
@@ -561,13 +593,14 @@ function timelineHTML() {
 
   return `
     <div class="timeline-scroll" data-timeline-day="${today}">
-      <div class="timeline-board" style="min-width:${220 + width}px;grid-template-columns:220px minmax(${width}px,1fr)">
+      <div class="timeline-board" style="min-width:${280 + width}px;grid-template-columns:280px minmax(${width}px,1fr)">
         <div class="timeline-side">
           <div class="timeline-top">KHÁCH HÀNG</div>
           ${ordered.map(c => `
             <div class="timeline-name">
-              <span class="timeline-avatar">${initials(c.name)}</span>
-              <div><b>${esc(c.name)}</b><small>Hẹn ${esc(appointmentDay(c))} ${esc(c.start)} → ${esc(scheduledEnd(c))}</small><small>${c.actualStartedAt ? `Thực tế ${esc(clockFromEpoch(c.actualStartedAt, now))} → ${esc(actualEnd(c, now))}` : 'Chưa bắt đầu điều trị'}</small></div>
+              <b>${esc(c.name)}</b>
+              <small class="timeline-scheduled-time">Hẹn ${esc(appointmentDay(c))} ${esc(c.start)} → ${esc(scheduledEnd(c))}</small>
+              <small class="timeline-actual-time">${c.actualStartedAt ? `Thực tế ${esc(clockFromEpoch(c.actualStartedAt, now))} → ${esc(actualEnd(c, now))}` : 'Chưa bắt đầu điều trị'}</small>
             </div>
           `).join('')}
         </div>
@@ -598,9 +631,18 @@ function timelineHTML() {
 function casesHTML() {
   const list = visibleCases();
   if (!list.length) {
+    state.casePage = 1;
     return `<div class="empty-box">Không có ca nào phù hợp bộ lọc hiện tại.</div>`;
   }
-  return `<div class="cases-grid">${list.map(caseCardHTML).join('')}</div>`;
+  const pages = Math.ceil(list.length / CASES_PER_PAGE);
+  state.casePage = clamp(state.casePage, 1, pages);
+  const shown = list.slice((state.casePage - 1) * CASES_PER_PAGE, state.casePage * CASES_PER_PAGE);
+  return `<div class="cases-grid">${shown.map(caseCardHTML).join('')}</div>${list.length > CASES_PER_PAGE ?
+    `<nav class="case-pagination" aria-label="Phân trang danh sách ca điều trị">
+      <button type="button" class="button" data-action="case-page" data-page="${state.casePage - 1}" ${state.casePage === 1 ? 'disabled' : ''}>← Trước</button>
+      <span>Trang ${state.casePage} / ${pages}<small lang="ja">${pages}ページ中 ${state.casePage}ページ</small></span>
+      <button type="button" class="button" data-action="case-page" data-page="${state.casePage + 1}" ${state.casePage === pages ? 'disabled' : ''}>Sau →</button>
+    </nav>` : ''}`;
 }
 function caseCardHTML(c) {
   const st = caseStatus(c);
@@ -609,7 +651,7 @@ function caseCardHTML(c) {
   const concurrent = concurrentRunningCount(c);
   const expanded = state.expanded.has(c.id);
   return `
-    <article class="case-card">
+    <article class="case-card ${highlightedCaseId === c.id ? 'case-highlight-target' : ''}" id="case-${esc(c.id)}" data-case-id="${esc(c.id)}" tabindex="-1">
       <div class="case-head">
         <div class="case-id">${initials(c.name)}</div>
         <div class="case-meta">
@@ -1110,11 +1152,15 @@ function refreshLive() {
   if (state.view !== 'dashboard') return;
   let changedStatus = false;
   let lateFilterChanged = false;
+  let roomPriorityChanged = false;
   const now = TBVNSync.now();
   for (const c of state.cases) {
     const left = caseLeft(c, now);
     const st = caseStatus(c, now);
     const late = appointmentDelayMinutes(c, now);
+    if (c.lastStatus && c.lastStatus !== st) changedStatus = true;
+    c.lastStatus = st;
+    if ((c.lastLateMinutes > 0) !== (late > 0)) roomPriorityChanged = true;
     if (state.filter === 'late' && (c.lastLateMinutes > 0) !== (late > 0)) lateFilterChanged = true;
     c.lastLateMinutes = late;
     document.querySelectorAll(`[data-late="${c.id}"]`).forEach(badge => {
@@ -1164,8 +1210,17 @@ function refreshLive() {
     if (cases) cases.innerHTML = casesHTML();
     const tl = $('#timelineContent');
     if (tl) tl.innerHTML = timelineHTML();
+  }
+  if (changedStatus || roomPriorityChanged) {
     const rooms = $('#roomBoard');
-    if (rooms) rooms.innerHTML = roomBoardHTML();
+    if (rooms) {
+      const positions = new Map(Array.from(rooms.querySelectorAll('.room-case-list'))
+        .map(list => [list.dataset.room, list.scrollTop]));
+      rooms.innerHTML = roomBoardHTML();
+      rooms.querySelectorAll('.room-case-list').forEach(list => {
+        list.scrollTop = positions.get(list.dataset.room) || 0;
+      });
+    }
   }
 }
 
@@ -1219,6 +1274,60 @@ function openDeleteDialog(c, trigger) {
 function closeDeleteDialog() {
   $('#modalRoot dialog')?.close();
 }
+function jumpToCase(id) {
+  const sequence = ++jumpSequence;
+  clearTimeout(jumpDelayTimer);
+  clearTimeout(highlightTimer);
+  document.querySelectorAll('.case-highlight-target').forEach(card => card.classList.remove('case-highlight-target'));
+  highlightedCaseId = null;
+  const c = state.cases.find(item => item.id === id);
+  if (!c || c.completed) {
+    toast('Ca này không còn trong bảng điều phối. Vui lòng tải lại danh sách.');
+    return;
+  }
+  if (state.roomFilter !== 'all' && state.roomFilter !== c.room) state.roomFilter = 'all';
+  if (!passesStatusFilter(c)) state.filter = 'all';
+  const query = normalized(state.caseSearch.trim());
+  if (query && !caseSearchText(c).includes(query)) state.caseSearch = '';
+  const index = visibleCases().findIndex(item => item.id === id);
+  if (index < 0) {
+    toast('Không tìm thấy ca này trong danh sách. Vui lòng tải lại.');
+    return;
+  }
+  state.casePage = Math.floor(index / CASES_PER_PAGE) + 1;
+  render();
+  requestAnimationFrame(() => {
+    if (sequence !== jumpSequence) return;
+    const target = document.getElementById(`case-${id}`);
+    if (!target || !state.cases.some(item => item.id === id)) {
+      toast('Ca này vừa được cập nhật hoặc xóa. Vui lòng tải lại danh sách.');
+      return;
+    }
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    target.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
+    jumpDelayTimer = setTimeout(() => {
+      if (sequence !== jumpSequence) return;
+      if (!state.cases.some(item => item.id === id && !item.completed)) {
+        toast('Ca này vừa bị xóa hoặc hoàn tất. Vui lòng chọn ca khác.');
+        return;
+      }
+      highlightedCaseId = id;
+      const card = document.getElementById(`case-${id}`);
+      if (!card) {
+        highlightedCaseId = null;
+        toast('Không thể mở thẻ ca này. Vui lòng chọn lại.');
+        return;
+      }
+      card.classList.add('case-highlight-target');
+      card.focus({ preventScroll: true });
+      highlightTimer = setTimeout(() => {
+        if (sequence !== jumpSequence) return;
+        highlightedCaseId = null;
+        document.getElementById(`case-${id}`)?.classList.remove('case-highlight-target');
+      }, 1000);
+    }, reduced ? 0 : 400);
+  });
+}
 
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-action]');
@@ -1253,11 +1362,31 @@ document.addEventListener('click', e => {
       break;
     case 'filter':
       state.filter = b.dataset.filter;
+      state.casePage = 1;
       render();
       break;
     case 'room-filter':
       state.roomFilter = b.dataset.room;
+      state.casePage = 1;
       render();
+      break;
+    case 'case-page':
+      state.casePage = Number(b.dataset.page);
+      $('#casesContent').innerHTML = casesHTML();
+      $('#casesTitle')?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+      break;
+    case 'select-room-tab':
+      if (!ROOM_BY[b.dataset.room]) break;
+      state.activeRoom = b.dataset.room;
+      document.querySelectorAll('[data-room-panel]').forEach(panel => panel.classList.toggle('is-mobile-active', panel.dataset.roomPanel === state.activeRoom));
+      document.querySelectorAll('[data-action="select-room-tab"]').forEach(tab => {
+        const active = tab.dataset.room === state.activeRoom;
+        tab.classList.toggle('active', active);
+        tab.setAttribute('aria-pressed', String(active));
+      });
+      break;
+    case 'jump-case':
+      jumpToCase(id);
       break;
     case 'set-room':
       if (!state.form || !ROOM_BY[b.dataset.room]) break;
@@ -1364,6 +1493,7 @@ document.addEventListener('input', e => {
   const t = e.target;
   if (t.id === 'caseSearch') {
     state.caseSearch = t.value;
+    state.casePage = 1;
     const box = $('#casesContent');
     if (box) box.innerHTML = casesHTML();
   } else if (t.id === 'catalogSearch') {

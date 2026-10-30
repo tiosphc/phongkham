@@ -112,6 +112,7 @@ window.TBVNBilingual = (() => {
       case 'open-new': return '新しい施術を作成';
       case 'retry-sync': return '再読み込み';
       case 'filter': return filterJp[button.dataset.filter];
+      case 'case-page': return button.textContent.includes('Trước') ? '前へ' : '次へ';
       case 'room-filter': return button.dataset.room === 'all' ? 'すべての部屋' : `治療室${button.dataset.room.slice(-1)}`;
       case 'set-room': return `治療室${button.dataset.room.slice(-1)}`;
       case 'start': return '開始';
